@@ -29,9 +29,9 @@ struct FloodCell {
     }
     FloodCell operator*(float coeff) const {
         FloodCell fc;
-        fc.vel = vel;// * coeff;
+        fc.vel = vel;
         fc.mass = mass * coeff;
-        fc.color = color;// * coeff;
+        fc.color = color;
         return fc;
     }
 };
@@ -104,7 +104,7 @@ void moveCell2(const Vector2& imgSz, const FloodField& field, FloodField& field2
 }
 
 void moveCell(const Vector2& imgSz, const FloodField& field, const StaticField& stat, int fromX, int fromY, float coeff, FloodField& field2) {
-    auto from = field[fromY][fromX];
+    auto from = field[fromY][fromX];    
     const Vector2& vel = from.vel;
     Vector2 pos = Vector2{float(fromX) + 0.5f, float(fromY) + 0.5f};
     Vector2 to = Vector2{std::clamp(fromX + vel.x + 0.5f, 0 + 0.5f, imgSz.x - 0.5f), std::clamp(fromY + vel.y + 0.5f, 0 + 0.5f, imgSz.y - 0.5f)};
@@ -131,13 +131,20 @@ void moveCell(const Vector2& imgSz, const FloodField& field, const StaticField& 
         ni = std::clamp(int(floor(pts[i].y)), 0, int(imgSz.y - 1));
         nj = std::clamp(int(floor(pts[i].x)), 0, int(imgSz.x - 1));
         if (stat[ni][nj].exists) {
-            bool ok = walkFrom(imgSz, stat, to, Vector2Normalize(-vel), to);
-            if (!ok) to = pos;
-            //off = Vector2Zero();
-            nj = int(floor(to.x));
-            ni = int(floor(to.y));
+            auto dir = Vector2Normalize(-vel);
+            Vector2 to2; bool ok = walkFrom(imgSz, stat, to, dir, to2);
+            if (!ok || Vector2DotProduct(to2 - pos, dir) > 0) to2 = pos;
+            auto v = to - pos;
+            if (nj != fromX)
+                v = Vector2Length(v) * Vector2Normalize(Vector2{0.0f, v.y});
+            if (ni != fromY)
+                v = Vector2Length(v) * Vector2Normalize(Vector2{v.x, 0.0f});
+            from.vel = v;
+            nj = int(floor(to2.x));
+            ni = int(floor(to2.y));
+        } else {
+            from.vel = to - pos;
         }
-        from.vel = to - pos;
         float ptCoeff = coeff * score[i] / score[4];
         field2[ni][nj] += from * ptCoeff;
     }
@@ -172,7 +179,7 @@ void applyGravity(const Vector2& imgSz, FloodField& field) {
     }
 }
 
-void applyPressure(const Vector2& imgSz, FloodField& field) {
+void applyPressure(const Vector2& imgSz, FloodField& field, StaticField& stat) {
     for (int i = 0; i < imgSz.y; ++i) {
         for (int j = 0; j < imgSz.x; ++j) {
             FloodCell& fc = field[i][j];
@@ -185,8 +192,9 @@ void applyPressure(const Vector2& imgSz, FloodField& field) {
                         int ii = i + di, jj = j + dj;
                         float m = 1.0f;
                         if (jj >= 0 && jj < imgSz.x && ii >= 0 && ii < imgSz.y) 
-                            m = field[ii][jj].mass;
+                            m = stat[ii][jj].exists ? 1.0f : field[ii][jj].mass;
                         v += (1.0f - m) * Vector2Normalize(Vector2{float(dj), float(di)});
+                        //v += (-fabs(1.0f - (m + (fc.mass - 1.0f)))) * Vector2Normalize(Vector2{float(dj), float(di)});
                     }
                 }
                 fc.vel += PRESSURE * v / 8.0f;
@@ -245,7 +253,7 @@ int main() {
             field = makeField(INPUT_IMG);
         //if (IsKeyDown(KEY_SPACE)) {
             applyGravity(imgSz, field);
-            applyPressure(imgSz, field);
+            applyPressure(imgSz, field, stat);
             moveField(imgSz, field, stat);
         //}
         drawField(img, field, stat);
