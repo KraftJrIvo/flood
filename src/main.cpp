@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <vector>
 #include <string>
-#include <iostream>
 #include <memory>
 #include <array>
 #include <algorithm>
@@ -24,6 +23,9 @@
 #define PRESSURE 1.0f
 #define MIN_VISC 0.1f
 #define MAX_VISC 0.85f
+
+#define M_RADIUS 30.0f
+#define M_FORCE 0.3f
 
 struct Matter {
     std::string name;
@@ -111,7 +113,6 @@ std::pair<MatterPortion, MatterPortion> splitMatterPortion(const MatterPortion& 
 template <int N>
 void walkAndPlace(const MatterField<N>& field, MatterField<N>& field2, MatterPortion mp, const Vector2& pos, const Vector2& vel, const Vector2& dir, int fx, int fy) {
     Vector2 end = pos;
-    bool outside = false;
     Vector2 step = {(dir.x > 0) ? 1.0f : -1.0f, (dir.y > 0) ? 1.0f : -1.0f};
     int j = int(floor(pos.x)), i = int(floor(pos.y));
     while (true) {
@@ -209,13 +210,10 @@ void applyPressure(MatterField<N>& field) {
         for (int j = 0; j < field.sz.x; ++j) {
             if (field.cells[i][j].fixed)
                 continue;
-            float mass = field.cells[i][j].mass();
             for (int k = 0; k < N; ++k) {
                 MatterPortion& mp = field.cells[i][j].content[k];
                 if (mp.matter) {
-                    float extraMass = std::max(mass - mp.matter->density, 0.0f);
                     float maxMass = 0.0f;
-                    float sumMass = 0.0f;
                     float nMass = 0.0f;
                     Vector2 v = Vector2Zero();
                     Vector2 v2 = Vector2Zero();
@@ -231,7 +229,6 @@ void applyPressure(MatterField<N>& field) {
                                     float massMP = field.cells[ii][jj].content[k].mass;
                                     if (massMP > EPS) {
                                         maxMass = std::max(maxMass, mass2);
-                                        sumMass += mass2;
                                         nMass += 1.0f;
                                         v2 += field.cells[ii][jj].vel();
                                     }
@@ -327,12 +324,11 @@ int main() {
     SetTargetFPS(60);
 
     Image img = GenImageColor(field.sz.x, field.sz.y, BLANK);
-    Image imgCopy = ImageCopy(img);
     Texture2D tex = LoadTextureFromImage(img);
 
     Vector2 offset = Vector2Zero(), curOffset = Vector2Zero();
     float scale = 1.0f;
-    Vector2 lastMouseGrabPos = GetMousePosition();
+    //Vector2 lastMouseGrabPos = GetMousePosition();
 
     bool gravityEnabled = true;
     bool mode = false;
@@ -341,7 +337,7 @@ int main() {
         if (IsKeyPressed(KEY_R))
             field = makeField<2>(INPUT_IMG, matters);
         if (gravityEnabled) applyGravity(field);
-        applyMouse(field, (GetMousePosition() - offset) / (scale * SCALE), 30.0f, IsMouseButtonDown(1) ? 0.3f : IsMouseButtonDown(0) ? -0.3f : 0.0f );
+        applyMouse(field, (GetMousePosition() - offset) / (scale * SCALE), M_RADIUS, IsMouseButtonDown(1) ? M_FORCE : IsMouseButtonDown(0) ? -M_FORCE : 0.0f );
         applyPressure(field);
         moveField(field);
         drawField(img, field);
