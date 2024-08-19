@@ -14,15 +14,16 @@
 
 #include "vec_ops.h"
 
-#define INPUT_IMG "res/test6.png"
+#define INPUT_IMG "res/test8.png"
 
 #define EPS 1e-3f
 
 #define GRAVITY Vector2{0.0f, 0.1f}
 
-#define PRESSURE 0.22f
-#define MASST 1.0f
-#define PRESSURE_TRANSFER 0.5f
+#define VEL_FADE 0.995f
+#define PRESSURE 1.0f
+#define MIN_VISC 0.1f
+#define MAX_VISC 0.85f
 
 struct Matter {
     std::string name;
@@ -42,7 +43,7 @@ struct MatterPortion {
     Vector3 color = Vector3Zero();
     void operator+=(const MatterPortion& b) {
         matter = b.matter;
-        vel = vel * mass / std::max(mass + b.mass, EPS) + b.vel * b.mass / std::max(mass + b.mass, EPS);
+        vel = VEL_FADE * (vel * mass / std::max(mass + b.mass, EPS) + b.vel * b.mass / std::max(mass + b.mass, EPS));
         color = color * mass / std::max(mass + b.mass, EPS) + b.color * b.mass / std::max(mass + b.mass, EPS);
         mass += b.mass;
     }
@@ -221,29 +222,41 @@ void applyPressure(MatterField<N>& field) {
                     for (int di = -1; di <= 1; ++di) {
                         for (int dj = -1; dj <= 1; ++dj) {
                             int ii = i + di, jj = j + dj;
-                            float mass2 = mp.matter->density;
-                            if (jj >= 0 && jj < field.sz.x && ii >= 0 && ii < field.sz.y && !field.cells[ii][jj].fixed) {
-                                mass2 = std::clamp(field.cells[ii][jj].mass(), 0.0f, mp.matter->density * 50.0f);
-                                float massMP = field.cells[ii][jj].content[k].mass;
-                                if (massMP > EPS) {
-                                    maxMass = std::max(maxMass, mass2);
-                                    sumMass += mass2;
-                                    nMass += 1.0f;
-                                    v2 += field.cells[ii][jj].vel();
+                            float mass2 = mp.matter->density * 3.0f;
+                            if (jj >= 0 && jj < field.sz.x && ii >= 0 && ii < field.sz.y) {
+                                if (field.cells[ii][jj].fixed) {
+                                    mass2 = mp.matter->density;
+                                } else {
+                                    mass2 = std::clamp(field.cells[ii][jj].mass(), 0.0f, mp.matter->density * 50.0f);
+                                    float massMP = field.cells[ii][jj].content[k].mass;
+                                    if (massMP > EPS) {
+                                        maxMass = std::max(maxMass, mass2);
+                                        sumMass += mass2;
+                                        nMass += 1.0f;
+                                        v2 += field.cells[ii][jj].vel();
+                                    }
                                 }
                             }
                             if (di == 0 && dj == 0)
                                 continue;
-                            //v += (mp.matter->density - mass2) * Vector2Normalize(Vector2{float(dj), float(di)});
-                            v += -fabs(mp.matter->density - (mass2 + (mp.mass - mp.matter->density))) * Vector2Normalize(Vector2{float(dj), float(di)});
-                            //v += -sqrt(fabs(mp.matter->density - (mass2 + (mp.mass - mp.matter->density)))) * Vector2Normalize(Vector2{float(dj), float(di)});
-                            //v += -(mp.matter->density - (mass2 + (mp.mass - mp.matter->density))) * (mp.matter->density - (m + (mp.mass - mp.matter->density))) * Vector2Normalize(Vector2{float(dj), float(di)});
+                            if (mp.mass < mp.matter->density || mp.mass > mp.matter->density)
+                                v += -sqrt(fabs(mp.matter->density - (mass2 + (mp.mass - mp.matter->density)))) * Vector2Normalize(Vector2{float(dj), float(di)});
+                            else
+                                v += -fabs(mp.matter->density - (mass2 + (mp.mass - mp.matter->density))) * Vector2Normalize(Vector2{float(dj), float(di)});
                         }
                     }
                     Vector2 vdelta = Vector2Zero();
-                    vdelta += PRESSURE * v / 8.0f;
+                    vdelta += (PRESSURE + (MAX_VISC - mp.matter->viscosity)) * v / 8.0f;
                     vdelta += mp.matter->viscosity * (v2 * (1.0f / std::max(nMass, 1.0f)) - mp.vel);
                     mp.vel += vdelta;
+                    for (int di = -1; di <= 1; ++di) {
+                        for (int dj = -1; dj <= 1; ++dj) {
+                            int ii = i + di, jj = j + dj;
+                            if (jj >= 0 && jj < field.sz.x && ii >= 0 && ii < field.sz.y && !field.cells[ii][jj].fixed) {
+                                field.cells[ii][jj].content[k].vel -= mp.matter->viscosity * (v2 * (1.0f / std::max(nMass, 1.0f)) - mp.vel) * 0.5f;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -285,17 +298,12 @@ void drawField(Image& img, MatterField<N>& field) {
                 auto& mp = field.cells[i][j].content[k];
                 if (mp.matter) {
                     brg = (unsigned char)std::clamp((brg + 255.0f * std::clamp(mp.mass, 0.0f, mp.matter->density) / mp.matter->density), float(brg), 255.0f);                    
-                    //Color c = {(unsigned char)(2550.f * field[i][j].vel.x), (unsigned char)(2550.f * field[i][j].vel.y), brg, 255};
-                    //Color c = {brg, brg, brg, 255};
-                    //if (stat[i][j].exists)
-                    //    c = {127, 127, 127, 255};
                     Vector3 clr = mp.color;
                     cv = cv * mass / std::max(mass + mp.mass, EPS) + clr * mp.mass / std::max(mass + mp.mass, EPS);
                     mass += std::max((mp.mass - mp.matter->density) * PRESSURE, 0.0f);
                     vel += Vector2Length(mp.vel);
                 }
             }
-            //Color c = {(unsigned char)(mass * 10), (unsigned char)(127), (unsigned char)(127), brg};
             //Color c = {(unsigned char)(cv.x), (unsigned char)(cv.y), (unsigned char)(cv.z), brg};
             Color c = {(unsigned char)(std::clamp(cv.x + vel * 30.0f + mass * 15.0f, 0.0f, 255.0f)), (unsigned char)(std::clamp(cv.y + vel * 30.0f, 0.0f, 255.0f)), (unsigned char)(std::clamp(cv.z + vel * 30.0f, 0.0f, 255.0f)), brg};
             ImageDrawPixel(&img, j, i, c);
@@ -306,7 +314,7 @@ void drawField(Image& img, MatterField<N>& field) {
 int main() {
 
     std::vector<MatterPtr> matters = {
-        std::make_shared<Matter>(Matter{"LIQUID", 0, Vector3{0.0f, 0.0f, 1.0f}, 1.0f, 0.1f, 0.5, EPS}),
+        std::make_shared<Matter>(Matter{"LIQUID", 0, Vector3{0.0f, 0.0f, 1.0f}, 1.0f, 1.0f, 0.5, EPS}),
         std::make_shared<Matter>(Matter{"WALL",   1, Vector3{0.5f, 0.5f, 0.5f}, 1.5f, 0.1f, 0, EPS})
     };
     auto field = makeField<2>(INPUT_IMG, matters);
@@ -326,16 +334,16 @@ int main() {
     float scale = 1.0f;
     Vector2 lastMouseGrabPos = GetMousePosition();
 
+    bool gravityEnabled = true;
+    bool mode = false;
     
     while (!WindowShouldClose()) {
         if (IsKeyPressed(KEY_R))
             field = makeField<2>(INPUT_IMG, matters);
-        //if (IsKeyDown(KEY_SPACE)) {
-        applyGravity(field);
+        if (gravityEnabled) applyGravity(field);
         applyMouse(field, (GetMousePosition() - offset) / (scale * SCALE), 30.0f, IsMouseButtonDown(1) ? 0.3f : IsMouseButtonDown(0) ? -0.3f : 0.0f );
         applyPressure(field);
         moveField(field);
-        //}
         drawField(img, field);
 
         Color *pixels = LoadImageColors(img);
@@ -346,6 +354,12 @@ int main() {
         ClearBackground(BLACK);
         DrawTextureEx(tex, offset + curOffset, 0.0f, SCALE * scale, WHITE);
         EndDrawing();
+
+        if (IsKeyPressed(KEY_G))
+            gravityEnabled = !gravityEnabled;
+        if (IsKeyPressed(KEY_Q))
+            mode = !mode;
+        matters[0]->viscosity = (mode ? MIN_VISC : MAX_VISC);
 
         // PAN + ZOOM
         //auto mpos = GetMousePosition();
