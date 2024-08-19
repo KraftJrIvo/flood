@@ -1,29 +1,19 @@
 #version 430
-
-// Game of Life rendering shader
-// Just renders the content of the ssbo at binding 1 to screen
-
-#define GOL_WIDTH 768
-
-// Input vertex attributes (from vertex shader)
 in vec2 fragTexCoord;
-
-// Output fragment color
 out vec4 finalColor;
 
-// Input game of life grid.
-layout(std430, binding = 1) readonly buffer golLayout
+layout(std430, binding = 1) readonly buffer colorsLayout
 {
-    uint golBuffer[];
+    float colorsBuffer[];
 };
 
-// Output resolution
-uniform vec2 resolution;
+uniform vec2 RESOLUTION;
 
 void main()
 {
-    ivec2 coords = ivec2(fragTexCoord*resolution);
-
-    if ((golBuffer[coords.x + coords.y*uvec2(resolution).x]) == 1) finalColor = vec4(1.0);
-    else finalColor = vec4(0.0, 0.0, 0.0, 1.0);
+    ivec2 coords = ivec2(fragTexCoord * RESOLUTION);
+    float r = colorsBuffer[coords.y * uvec2(RESOLUTION).x * 3 + coords.x * 3 + 0];
+    float g = colorsBuffer[coords.y * uvec2(RESOLUTION).x * 3 + coords.x * 3 + 1];
+    float b = colorsBuffer[coords.y * uvec2(RESOLUTION).x * 3 + coords.x * 3 + 2];
+    finalColor = vec4(r, g, b, 1.0);
 }

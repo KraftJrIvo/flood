@@ -7,11 +7,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 project(FLOOD VERSION 1.0 DESCRIPTION "synthetic car sequence recorder" LANGUAGES CXX)
 
 # TARGET
-set(FLOOD_SOURCE_FILES
-    "src/main.cpp"
+set(FLOOD_CPU_SOURCE_FILES
+    "src/main_cpu.cpp"
 )
-add_executable(FLOOD ${FLOOD_SOURCE_FILES})
-target_include_directories(FLOOD PUBLIC "src")
+add_executable(FLOOD_CPU ${FLOOD_CPU_SOURCE_FILES})
+target_include_directories(FLOOD_CPU PUBLIC "src")
+
+set(FLOOD_GPU_SOURCE_FILES
+    "src/main_gpu.cpp"
+)
+add_executable(FLOOD_GPU ${FLOOD_GPU_SOURCE_FILES})
+target_include_directories(FLOOD_GPU PUBLIC "src")
 
 set(RAYLIB_VERSION 5.0)
 find_package(raylib ${RAYLIB_VERSION} QUIET) # QUIET or REQUIRED
@@ -27,10 +33,12 @@ if (NOT raylib_FOUND) # If there's none, fetch and build raylib
     set(FETCHCONTENT_QUIET NO)
     FetchContent_Populate(raylib)
     set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE) # don't build the supplied examples
+    set(GRAPHICS_API "GRAPHICS_API_OPENGL_43" CACHE STRING "" FORCE)
     add_subdirectory(${raylib_SOURCE_DIR} ${raylib_BINARY_DIR})
   endif()
 endif()
-target_link_libraries(FLOOD PUBLIC raylib)
+target_link_libraries(FLOOD_CPU PUBLIC raylib)
+target_link_libraries(FLOOD_GPU PUBLIC raylib)
 
 add_custom_target(prepare_rel
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/Release
