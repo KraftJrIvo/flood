@@ -19,6 +19,12 @@ set(FLOOD_GPU_SOURCE_FILES
 add_executable(FLOOD_GPU ${FLOOD_GPU_SOURCE_FILES})
 target_include_directories(FLOOD_GPU PUBLIC "src")
 
+set(FLOOD_GPU_CS_SOURCE_FILES
+    "src/main_gpu_cs.cpp"
+)
+add_executable(FLOOD_GPU_CS ${FLOOD_GPU_CS_SOURCE_FILES})
+target_include_directories(FLOOD_GPU_CS PUBLIC "src")
+
 set(RAYLIB_VERSION 5.0)
 find_package(raylib ${RAYLIB_VERSION} QUIET) # QUIET or REQUIRED
 if (NOT raylib_FOUND) # If there's none, fetch and build raylib
@@ -39,6 +45,7 @@ if (NOT raylib_FOUND) # If there's none, fetch and build raylib
 endif()
 target_link_libraries(FLOOD_CPU PUBLIC raylib)
 target_link_libraries(FLOOD_GPU PUBLIC raylib)
+target_link_libraries(FLOOD_GPU_CS PUBLIC raylib)
 
 add_custom_target(prepare_rel
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/Release
